@@ -28,54 +28,43 @@ public partial struct EnemyMoveSystem : ISystem
             if (brain.ValueRO.Mode != EnemyMode.Go)
                 continue;
 
-            int index = path.Length == 0 ? 0 : math.clamp(cursor.ValueRO.Index, 0, path.Length - 1);
-            bool lastPoint = path.Length == 0 || index >= path.Length - 1;
-            float3 target = lastPoint ? playerPosition : path[index].Position;
+            float3 toPlayer = playerPosition - transform.ValueRO.Position;
+            toPlayer.y = 0f;
+            float playerDistance = math.length(toPlayer);
+            if (playerDistance <= 0.75f)
+                continue;
+
+            float3 target = playerPosition;
+            if (path.Length > 0)
+            {
+                int index = math.clamp(cursor.ValueRO.Index, 0, path.Length - 1);
+                float3 corner = path[index].Position;
+                float3 cornerToPlayer = playerPosition - corner;
+                cornerToPlayer.y = 0f;
+                if (math.lengthsq(cornerToPlayer) + 0.25f < playerDistance * playerDistance)
+                    target = corner;
+                else if (index < path.Length - 1)
+                    cursor.ValueRW.Index = index + 1;
+            }
+
             float3 offset = target - transform.ValueRO.Position;
             offset.y = 0f;
             float distance = math.length(offset);
-
-            if (!lastPoint && distance <= WaypointReach)
-            {
-                index += 1;
-                cursor.ValueRW.Index = index;
-                lastPoint = index >= path.Length - 1;
-                target = lastPoint ? playerPosition : path[index].Position;
-                offset = target - transform.ValueRO.Position;
-                offset.y = 0f;
-                distance = math.length(offset);
-            }
+            if (distance < 0.05f)
+                offset = toPlayer;
 
             var staminaValue = stamina.ValueRO;
-            if (distance <= 0.75f)
-            {
-                stamina.ValueRW = staminaValue;
-                continue;
-            }
+            float speedScale = staminaValue.Current > 0.2f ? 1f : 0.55f;
+            float3 direction = math.normalize(offset);
+            float step = math.min(enemy.ValueRO.Speed * speedScale * dt, playerDistance - 0.75f);
+            float3 position = transform.ValueRO.Position + direction * step;
+            position.y = 0.4f;
+            transform.ValueRW.Position = position;
+            transform.ValueRW.Rotation = quaternion.LookRotationSafe(direction, math.up());
 
-            if (staminaValue.Moving == 1)
-            {
-                if (staminaValue.Current <= 0f)
-                    staminaValue.Moving = 0;
-            }
-            else if (staminaValue.Current >= staminaValue.ResumeAt)
-            {
-                staminaValue.Moving = 1;
-            }
-
-            if (staminaValue.Moving == 1)
-            {
-                float3 direction = offset / distance;
-                float step = math.min(enemy.ValueRO.Speed * dt, distance - 0.75f);
-                float3 position = transform.ValueRO.Position + direction * step;
-                position.y = 0.4f;
-                transform.ValueRW.Position = position;
-                transform.ValueRW.Rotation = quaternion.LookRotationSafe(direction, math.up());
+            if (speedScale > 0.9f)
                 staminaValue.Current = math.max(0f, staminaValue.Current - staminaValue.MoveDrainPerSecond * dt);
-                if (staminaValue.Current <= 0f)
-                    staminaValue.Moving = 0;
-            }
-
+            staminaValue.Moving = 1;
             stamina.ValueRW = staminaValue;
         }
     }

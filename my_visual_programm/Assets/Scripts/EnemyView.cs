@@ -37,7 +37,7 @@ public class EnemyView : MonoBehaviour
         DestroyImmediate(template);
 
         goMaterial = CreateMaterial(new Color(0.86f, 0.18f, 0.14f));
-        waitMaterial = CreateMaterial(new Color(0.22f, 0.26f, 0.34f));
+        waitMaterial = CreateMaterial(new Color(0.45f, 0.08f, 0.08f));
         attackMaterial = CreateMaterial(new Color(1f, 0.55f, 0.1f));
         dieMaterial = CreateMaterial(new Color(0.45f, 0.45f, 0.48f));
         goBatch = new Matrix4x4[1023];
@@ -84,7 +84,7 @@ public class EnemyView : MonoBehaviour
         manager.AddComponentData(manager.CreateEntity(), new BattleStats { Seed = 1 });
         enemies = manager.CreateEntityQuery(
             ComponentType.ReadOnly<LocalTransform>(),
-            ComponentType.ReadOnly<Stamina>(),
+            ComponentType.ReadOnly<Health>(),
             ComponentType.ReadOnly<EnemyState>(),
             ComponentType.ReadOnly<Enemy>());
         stats = manager.CreateEntityQuery(ComponentType.ReadOnly<BattleStats>());
@@ -111,7 +111,7 @@ public class EnemyView : MonoBehaviour
             return;
 
         using NativeArray<LocalTransform> transforms = enemies.ToComponentDataArray<LocalTransform>(Allocator.Temp);
-        using NativeArray<Stamina> staminas = enemies.ToComponentDataArray<Stamina>(Allocator.Temp);
+        using NativeArray<Health> healths = enemies.ToComponentDataArray<Health>(Allocator.Temp);
         using NativeArray<EnemyState> brains = enemies.ToComponentDataArray<EnemyState>(Allocator.Temp);
         using NativeArray<Enemy> enemyData = enemies.ToComponentDataArray<Enemy>(Allocator.Temp);
 
@@ -144,7 +144,7 @@ public class EnemyView : MonoBehaviour
                 scale *= 1.2f;
                 attack = true;
             }
-            else if (staminas[i].Moving == 1)
+            else
             {
                 bob = Mathf.Sin(time * 10f + enemyData[i].AnimPhase) * 0.16f;
                 pitch = Mathf.Sin(time * 10f + enemyData[i].AnimPhase) * 8f;
@@ -162,10 +162,10 @@ public class EnemyView : MonoBehaviour
                 Push(dieBatch, dieMaterial, ref dying, matrix);
             else if (attack)
                 Push(attackBatch, attackMaterial, ref attacking, matrix);
-            else if (staminas[i].Moving == 1)
-                Push(goBatch, goMaterial, ref going, matrix);
-            else
+            else if (healths[i].Current < 80f)
                 Push(waitBatch, waitMaterial, ref waiting, matrix);
+            else
+                Push(goBatch, goMaterial, ref going, matrix);
         }
 
         Flush(goBatch, goMaterial, going);
@@ -191,7 +191,7 @@ public class EnemyView : MonoBehaviour
             if (body.Health <= 0f)
                 hint = "Игрок погиб.";
             else if (body.WavesOpen == 1)
-                hint = "Красные идут по пути, тёмные копят стамину, оранжевые атакуют, серые умирают.";
+                hint = "Красные идут за игроком, оранжевые атакуют, серые умирают.";
         }
 
         if (labelStyle == null)

@@ -3,55 +3,6 @@ using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Transforms;
 
-[UpdateBefore(typeof(EnemyBrainSystem))]
-[BurstCompile]
-public partial struct PlayerWeaponSystem : ISystem
-{
-    Random random;
-
-    public void OnCreate(ref SystemState state)
-    {
-        random = new Random(99);
-        state.RequireForUpdate<PlayerBody>();
-    }
-
-    [BurstCompile]
-    public void OnUpdate(ref SystemState state)
-    {
-        var player = SystemAPI.GetSingletonRW<PlayerBody>();
-        if (player.ValueRO.WavesOpen == 0 || player.ValueRO.Health <= 0f)
-            return;
-
-        float cooldown = player.ValueRO.WeaponCooldown - SystemAPI.Time.DeltaTime;
-        float pulse = math.max(0f, player.ValueRO.WeaponPulse - SystemAPI.Time.DeltaTime);
-        if (cooldown > 0f)
-        {
-            player.ValueRW.WeaponCooldown = cooldown;
-            player.ValueRW.WeaponPulse = pulse;
-            return;
-        }
-
-        player.ValueRW.WeaponCooldown = random.NextFloat(3f, 5f);
-        player.ValueRW.WeaponPulse = 0.25f;
-        float radiusSq = player.ValueRO.WeaponRadius * player.ValueRO.WeaponRadius;
-        float damage = player.ValueRO.WeaponDamage;
-        float3 origin = player.ValueRO.Position;
-
-        foreach (var (transform, health, brain) in
-                 SystemAPI.Query<RefRO<LocalTransform>, RefRW<Health>, RefRO<EnemyState>>().WithAll<Enemy>())
-        {
-            if (brain.ValueRO.Mode == EnemyMode.Die || health.ValueRO.Current <= 0f)
-                continue;
-
-            float3 offset = transform.ValueRO.Position - origin;
-            offset.y = 0f;
-            if (math.lengthsq(offset) <= radiusSq)
-                health.ValueRW.Current -= damage;
-        }
-    }
-}
-
-[UpdateAfter(typeof(PlayerWeaponSystem))]
 [UpdateBefore(typeof(EnemyPathSystem))]
 [BurstCompile]
 public partial struct EnemyBrainSystem : ISystem
@@ -66,11 +17,10 @@ public partial struct EnemyBrainSystem : ISystem
     public void OnUpdate(ref SystemState state)
     {
         float dt = SystemAPI.Time.DeltaTime;
-        var player = SystemAPI.GetSingletonRW<PlayerBody>();
-        float playerHealth = player.ValueRO.Health;
-        float reach = player.ValueRO.Radius + 0.7f;
+        PlayerBody player = SystemAPI.GetSingleton<PlayerBody>();
+        float reach = player.Radius + 1.2f;
         float reachSq = reach * reach;
-        float3 playerPosition = player.ValueRO.Position;
+        float3 playerPosition = player.Position;
 
         foreach (var (transform, health, brain) in
                  SystemAPI.Query<RefRO<LocalTransform>, RefRW<Health>, RefRW<EnemyState>>().WithAll<Enemy>())
@@ -97,20 +47,9 @@ public partial struct EnemyBrainSystem : ISystem
                 continue;
             }
 
-            brain.ValueRW.Mode = EnemyMode.Attack;
-            float cooldown = brain.ValueRO.AttackCooldown - dt;
-            if (cooldown > 0f)
-            {
-                brain.ValueRW.AttackCooldown = cooldown;
-                continue;
-            }
-
-            brain.ValueRW.AttackCooldown = 0.55f;
-            health.ValueRW.Current -= 22f;
-            playerHealth -= 8f;
+            if (brain.ValueRO.Mode != EnemyMode.Attack)
+                brain.ValueRW.Mode = EnemyMode.Attack;
         }
-
-        player.ValueRW.Health = math.max(0f, playerHealth);
     }
 }
 
